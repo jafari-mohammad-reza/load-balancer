@@ -2,6 +2,7 @@ package algs
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,7 +11,9 @@ import (
 type RoundRobinAlgorithm struct {
 	Servers        []IBackendServer
 	healthyServers map[uuid.UUID]IBackendServer
+	orderedHealthy []IBackendServer
 	CurrentIndex   int
+	mu             sync.Mutex
 	ticker         *time.Ticker
 }
 
@@ -25,9 +28,16 @@ func (r *RoundRobinAlgorithm) HealthyServers() ([]IBackendServer, error) {
 	return servers, nil
 }
 func (r *RoundRobinAlgorithm) NextServer() (IBackendServer, error) {
-	return nil, nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.CurrentIndex = (r.CurrentIndex + 1) % len(r.healthyServers)
+	return r.orderedHealthy[r.CurrentIndex], nil
 }
 func (r *RoundRobinAlgorithm) healthCheck() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.healthyServers = make(map[uuid.UUID]IBackendServer)
+	r.orderedHealthy = r.orderedHealthy[:0]
 	for _, server := range r.Servers {
 		if err := Ping(server); err != nil {
 			fmt.Printf("Server %s is unhealthy: %v\n", server.GetUrl(), err)
@@ -49,11 +59,20 @@ func NewRoundRobinAlgorithm(params AlgParams) (*RoundRobinAlgorithm, error) {
 			healthyServers[server.GetID()] = server
 		}
 	}
+	orderedHealthy := make([]IBackendServer, 0, len(healthyServers))
+	for _, server := range params.Servers {
+		if server.GetStatus() == Healthy {
+			healthyServers[server.GetID()] = server
+			orderedHealthy = append(orderedHealthy, server)
+		}
+	}
 	alg := &RoundRobinAlgorithm{
 		Servers:        params.Servers,
 		healthyServers: healthyServers,
+		orderedHealthy: orderedHealthy,
 		CurrentIndex:   -1,
 		ticker:         time.NewTicker(time.Second * 30),
+		mu:             sync.Mutex{},
 	}
 	go func() {
 		for range alg.ticker.C {

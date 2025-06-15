@@ -61,7 +61,7 @@ func NewRandomAlgorithm(params AlgParams) (*RandomAlgorithm, error) {
 	alg := &RandomAlgorithm{
 		Servers:        params.Servers,
 		healthyServers: healthyServers,
-		ticker:         time.NewTicker(time.Second * 1),
+		ticker:         time.NewTicker(time.Second * 30),
 	}
 	go func() {
 		for range alg.ticker.C {

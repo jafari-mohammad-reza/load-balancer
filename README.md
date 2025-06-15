@@ -1,0 +1,2 @@
+### load balancer
+minimal loadbalancer that reads configs from yaml file and proxy requests to upstreams using specified algorithm and implement fallback mechanism that if one upstream fails check the other one and do an interval health check to send requests to healthy upstreams

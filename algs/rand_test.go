@@ -1,7 +1,6 @@
 package algs
 
 import (
-	"fmt"
 	"os"
 	"testing"
 )
@@ -33,7 +32,6 @@ func TestRandomAlgorithm(t *testing.T) {
 	}
 
 	nextServer, err := alg.NextServer()
-	fmt.Println(nextServer.GetUrl())
 	if err != nil || nextServer == nil {
 		t.Errorf("NextServer returned unexpected result: %v, error: %v", nextServer, err)
 	}
