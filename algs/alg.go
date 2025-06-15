@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"load-balancer/conf"
 	"net/http"
 	"os"
 	"sync"
@@ -96,7 +97,7 @@ type IAlgorithm interface {
 type Alg string
 
 const (
-	Random             Alg = "random"
+	Random             Alg = "Random"
 	RoundRobin         Alg = "RoundRobin"
 	WeightedRoundRobin Alg = "WeightedRoundRobin"
 )
@@ -105,7 +106,7 @@ type AlgParams struct {
 	Servers []IBackendServer
 }
 
-func NewAlgorithm(alg Alg, params AlgParams) (IAlgorithm, error) {
+func AlgFactory(alg Alg, params AlgParams) (IAlgorithm, error) {
 	switch alg {
 	case Random:
 		return NewRandomAlgorithm(params)
@@ -139,4 +140,17 @@ func Ping(server IBackendServer) error {
 		return err
 	}
 	return errors.New(":ping error")
+}
+
+func NewAlgorithm(conf *conf.Conf) (IAlgorithm, error) {
+	servers := make([]IBackendServer, 0, len(conf.BackendServers))
+	for _, server := range conf.BackendServers {
+		servers = append(servers, NewBackendServer(server.Host, server.Port, server.Weight))
+	}
+	alg, err := AlgFactory(Alg(conf.Algorithm), AlgParams{
+		Servers: servers})
+	if err != nil {
+		return nil, fmt.Errorf("error while selecting algorithm %v", err)
+	}
+	return alg, nil
 }
