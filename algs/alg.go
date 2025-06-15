@@ -2,8 +2,14 @@ package algs
 
 import (
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type ServerStatus string
@@ -14,25 +20,25 @@ const (
 )
 
 type IBackendServer interface {
-	Ping() error
 	SetStatus(status ServerStatus) error
 	GetStatus() ServerStatus
+	GetID() uuid.UUID
+	GetUrl() string
+	IncrementReqCount() int
+	SetWeight(weight int) error
+	GetWeight() int
 }
 type BackendServer struct {
-	Host          string
-	Port          int
-	PingUrl       string
-	ReqCount      int
-	TotalReqCount int // the request count the server can handles
-	Weight        int
-	Status        ServerStatus
-	LastChecked   time.Time
-	mu            sync.RWMutex
+	ID          uuid.UUID
+	Host        string
+	Port        int
+	ReqCount    int
+	Weight      int
+	Status      ServerStatus
+	LastChecked time.Time
+	mu          sync.RWMutex
 }
 
-func (s *BackendServer) Ping() error {
-	return nil
-}
 func (s *BackendServer) SetStatus(status ServerStatus) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -42,17 +48,43 @@ func (s *BackendServer) SetStatus(status ServerStatus) error {
 func (s *BackendServer) GetStatus() ServerStatus {
 	return s.Status
 }
-func NewBackendServer(host string, port int, pingUrl string, totalReqCount int, weight int) *BackendServer {
+func (s *BackendServer) GetID() uuid.UUID {
+	return s.ID
+}
+func (s *BackendServer) GetUrl() string {
+	return fmt.Sprintf("http://%s:%d", s.Host, s.Port)
+}
+func (s *BackendServer) IncrementReqCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ReqCount++
+	return s.ReqCount
+}
+func (s *BackendServer) SetWeight(weight int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if weight < 0 {
+		return errors.New("weight cannot be negative")
+	}
+	s.Weight = weight
+	return nil
+}
+func (s *BackendServer) GetWeight() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.Weight
+}
+
+func NewBackendServer(host string, port int, weight int) *BackendServer {
 	return &BackendServer{
-		Host:          host,
-		Port:          port,
-		PingUrl:       pingUrl,
-		ReqCount:      0,
-		TotalReqCount: totalReqCount,
-		Weight:        weight,
-		Status:        Healthy,
-		LastChecked:   time.Now(),
-		mu:            sync.RWMutex{},
+		ID:          uuid.New(),
+		Host:        host,
+		Port:        port,
+		ReqCount:    0,
+		Weight:      weight,
+		Status:      Healthy,
+		LastChecked: time.Now(),
+		mu:          sync.RWMutex{},
 	}
 }
 
@@ -84,4 +116,27 @@ func NewAlgorithm(alg Alg, params AlgParams) (IAlgorithm, error) {
 	default:
 		return nil, errors.New("unsupported algorithm")
 	}
+}
+
+func Ping(server IBackendServer) error {
+	if os.Getenv("RUN_TYPE") == "test" {
+		return nil
+	}
+	url := fmt.Sprintf("%s/ping", server.GetUrl())
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("Request failed:", err)
+		return err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Failed to read response:", err)
+		return err
+	}
+	defer resp.Body.Close()
+	if string(body) != "Pong" {
+		fmt.Println("Unexpected response:", string(body))
+		return err
+	}
+	return errors.New(":ping error")
 }
