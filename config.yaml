@@ -11,3 +11,22 @@ kafka:
   servers: localhost:9092
   client_id: balancer
   log_topic: balancer-logs
+proxies:
+  - port: 8080
+    host: "example.com"
+    locations:
+      - path: "/api"
+        algorithm: "RoundRobin"
+        backendServers:
+          - host: "localhost"
+            port: 8001
+          - host: "localhost"
+            port: 8002
+  - port: 9090
+    host: "another.com"
+    locations:
+      - path: "/"
+        algorithm: "Random"
+        backendServers:
+          - host: "localhost"
+            port: 9001

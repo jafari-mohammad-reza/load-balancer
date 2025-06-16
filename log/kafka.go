@@ -40,7 +40,6 @@ func (k *KafkaLogger) write(level LogLevel, args ...any) error {
 		Level:    level,
 		Args:     toStringSlice(args),
 	}
-
 	data, err := json.Marshal(entry)
 	if err != nil {
 		return fmt.Errorf("failed to marshal log entry: %w", err)

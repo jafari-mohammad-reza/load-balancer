@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"load-balancer/algs"
 	"load-balancer/balancer"
 	"load-balancer/conf"
 	"load-balancer/log"
@@ -20,13 +19,8 @@ func main() {
 		fmt.Printf("error creating logger %v", err)
 		os.Exit(1)
 	}
-	alg, err := algs.NewAlgorithm(conf)
-	if err != nil {
-		logger.Error(fmt.Errorf("error creating algorithm %v", err))
-		os.Exit(1)
-	}
-	balancer := balancer.NewBalancer(conf, alg, logger)
-	if err := balancer.ReverseProxy(); err != nil {
+	balancer := balancer.NewBalancer(conf, logger)
+	if err := balancer.Start(); err != nil {
 		logger.Error(fmt.Errorf("error starting reverse proxy: %v", err))
 		os.Exit(1)
 	}

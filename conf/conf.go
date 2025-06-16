@@ -12,12 +12,27 @@ const (
 )
 
 type Conf struct {
-	Port           int             `mapstructure:"port"`
-	Algorithm      string          `mapstructure:"algorithm"`
-	BackendServers []BackendServer `mapstructure:"backend_servers"`
-	Log            LogConf         `mapstructure:"log"`
-	Kafka          KafkaConf       `mapstructure:"kafka"`
+	Port    int         `mapstructure:"port"`
+	Proxies []ProxyConf `mapstructure:"proxies"`
+	Log     LogConf     `mapstructure:"log"`
+	Kafka   KafkaConf   `mapstructure:"kafka"`
 }
+
+type ProxyConf struct {
+	Port           int
+	Host           string
+	Tls            bool
+	Certificate    string
+	CertificateKey string
+	Locations      []LocationConf
+}
+
+type LocationConf struct {
+	Path           string
+	Algorithm      string `mapstructure:"algorithm"`
+	BackendServers []BackendServer
+}
+
 type BackendServer struct {
 	Host   string `mapstructure:"host"`
 	Port   int    `mapstructure:"port"`

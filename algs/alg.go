@@ -142,12 +142,12 @@ func Ping(server IBackendServer) error {
 	return errors.New(":ping error")
 }
 
-func NewAlgorithm(conf *conf.Conf) (IAlgorithm, error) {
-	servers := make([]IBackendServer, 0, len(conf.BackendServers))
-	for _, server := range conf.BackendServers {
+func NewAlgorithm(loc *conf.LocationConf) (IAlgorithm, error) {
+	servers := make([]IBackendServer, 0, len(loc.BackendServers))
+	for _, server := range loc.BackendServers {
 		servers = append(servers, NewBackendServer(server.Host, server.Port, server.Weight))
 	}
-	alg, err := AlgFactory(Alg(conf.Algorithm), AlgParams{
+	alg, err := AlgFactory(Alg(loc.Algorithm), AlgParams{
 		Servers: servers})
 	if err != nil {
 		return nil, fmt.Errorf("error while selecting algorithm %v", err)

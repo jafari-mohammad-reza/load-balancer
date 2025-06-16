@@ -3,71 +3,105 @@ package balancer
 import (
 	"fmt"
 	"io"
-	"load-balancer/algs"
+
 	"load-balancer/conf"
 	"load-balancer/log"
 	"net/http"
 	"path"
 	"testing"
-	"time"
 )
 
 func startMockServer(port int, body string) *http.Server {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, body)
 	})
-	s := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: handler}
-	go s.ListenAndServe()
-
-	return s
+	srv := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: handler}
+	go srv.ListenAndServe()
+	return srv
 }
 
-func TestBalancer_ReverseProxy(t *testing.T) {
+func TestBalancer_Start(t *testing.T) {
+	s8001 := startMockServer(8001, "from-8001")
+	s8002 := startMockServer(8002, "from-8002")
+	s9001 := startMockServer(9001, "from-9001")
+	defer s8001.Close()
+	defer s8002.Close()
+	defer s9001.Close()
 
-	s1 := startMockServer(9001, "server-1")
-	s2 := startMockServer(9002, "server-2")
-	time.Sleep(100 * time.Millisecond) // Give servers time to start
-	defer s1.Close()
-	defer s2.Close()
-	tmpLogPath := t.TempDir()
-	tmpPath := path.Join(tmpLogPath, "test-balancer.log")
-	conf := &conf.Conf{
-		Port:           9090,
-		Algorithm:      "RoundRobin",
-		BackendServers: []conf.BackendServer{conf.BackendServer{Host: "localhost", Port: 9001, Weight: 1}, conf.BackendServer{Host: "localhost", Port: 9002, Weight: 1}},
-		Log: conf.LogConf{
-			Logger:  conf.JSON,
-			LogPath: tmpPath,
+	cfg := &conf.Conf{
+		Proxies: []conf.ProxyConf{
+			{
+				Port: 8080,
+				Host: "example.com",
+				Locations: []conf.LocationConf{
+					{
+						Path:      "/api",
+						Algorithm: "RoundRobin",
+						BackendServers: []conf.BackendServer{
+							{Host: "localhost", Port: 8001},
+							{Host: "localhost", Port: 8002},
+						},
+					},
+				},
+			},
+			{
+				Port: 9090,
+				Host: "another.com",
+				Locations: []conf.LocationConf{
+					{
+						Path:      "/",
+						Algorithm: "Random",
+						BackendServers: []conf.BackendServer{
+							{Host: "localhost", Port: 9001},
+						},
+					},
+				},
+			},
 		},
 	}
-	alg, err := algs.NewAlgorithm(conf)
-	if err != nil {
-		t.Fatalf("Failed to initialize algorithm: %v", err)
-	}
-	logger, err := log.NewLogger(conf)
-	if err != nil {
-		t.Fatalf("Failed to initialize logger: %v", err)
-	}
-	b := NewBalancer(conf, alg, logger)
 
+	logPath := path.Join(t.TempDir(), "test.log")
+	cfg.Log = conf.LogConf{
+		Logger:  conf.JSON,
+		LogPath: logPath,
+	}
+	logger, err := log.NewLogger(cfg)
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+
+	b := NewBalancer(cfg, logger)
 	go func() {
-		err := b.ReverseProxy()
-		if err != nil {
-			t.Errorf("ReverseProxy failed: %v", err)
+		if err := b.Start(); err != nil {
+			t.Errorf("balancer.Start() error: %v", err)
 		}
 	}()
-	time.Sleep(200 * time.Millisecond)
 
-	expected := []string{"server-1", "server-2", "server-1", "server-2"}
-	for i, exp := range expected {
-		resp, err := http.Get("http://localhost:9090")
+	results := make([]string, 0, 4)
+	for i := 0; i < 4; i++ {
+		req, _ := http.NewRequest("GET", "http://localhost:8080/api", nil)
+		req.Host = "example.com"
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			t.Fatalf("Request %d failed: %v", i, err)
+			t.Fatalf("request to roundrobin failed: %v", err)
 		}
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if string(body) != exp {
-			t.Errorf("Expected %q, got %q", exp, string(body))
-		}
+		results = append(results, string(body))
+	}
+	if results[0] == results[1] && results[1] == results[2] {
+		t.Errorf("RoundRobin failed, all responses are the same: %v", results)
+	}
+
+	req, _ := http.NewRequest("GET", "http://localhost:9090/", nil)
+	req.Host = "another.com"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request to random failed: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(body) != "from-9001" {
+		t.Errorf("Expected 'from-9001', got %s", body)
 	}
 }
