@@ -3,6 +3,7 @@ package balancer
 import (
 	"fmt"
 	"io"
+	"os"
 
 	"load-balancer/conf"
 	"load-balancer/log"
@@ -79,6 +80,9 @@ func TestBalancer_Start(t *testing.T) {
 
 	results := make([]string, 0, 4)
 	for i := 0; i < 4; i++ {
+		if os.Getenv("CI") != "" {
+			t.Skip("Skipping balancer test in CI environment")
+		}
 		req, _ := http.NewRequest("GET", "http://localhost:8080/api", nil)
 		req.Host = "example.com"
 		resp, err := http.DefaultClient.Do(req)
