@@ -1,7 +1,6 @@
 package algs
 
 import (
-	"fmt"
 	"os"
 	"testing"
 )
@@ -42,7 +41,6 @@ func TestRoundRobin(t *testing.T) {
 		}
 
 		url := nextServer.GetUrl()
-		fmt.Printf("[%d] nextServer.GetUrl(): %v\n", i, url)
 
 		if returned[url] {
 			t.Errorf("Duplicate server returned by NextServer: %s", url)

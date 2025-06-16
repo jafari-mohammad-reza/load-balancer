@@ -16,6 +16,7 @@ type Conf struct {
 	Algorithm      string          `mapstructure:"algorithm"`
 	BackendServers []BackendServer `mapstructure:"backend_servers"`
 	Log            LogConf         `mapstructure:"log"`
+	Kafka          KafkaConf       `mapstructure:"kafka"`
 }
 type BackendServer struct {
 	Host   string `mapstructure:"host"`
@@ -26,6 +27,11 @@ type BackendServer struct {
 type LogConf struct {
 	Logger  Logger `mapstructure:"logger"`
 	LogPath string `mapstructure:"log_path"`
+}
+type KafkaConf struct {
+	Servers  string `mapstructure:"servers"`
+	ClientId string `mapstructure:"client_id"`
+	LogTopic string `mapstructure:"log_topic"`
 }
 
 func ReadConf() (*Conf, error) {

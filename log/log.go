@@ -16,6 +16,8 @@ func NewLogger(conf *conf.Conf) (ILogger, error) {
 	switch conf.Log.Logger {
 	case "json":
 		return NewJsonLogger(conf), nil
+	case "kafka":
+		return NewKafkaLogger(conf)
 	default:
 		return nil, errors.New("unexpected logger")
 	}

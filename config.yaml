@@ -5,5 +5,9 @@ backend_servers:
     port: 8081
     weight: 1
 log:
-  logger: json
+  logger: kafka
   log_path: balancer-logs.json
+kafka:
+  servers: localhost:9092
+  client_id: balancer
+  log_topic: balancer-logs
