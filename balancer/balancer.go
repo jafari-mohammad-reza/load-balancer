@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"load-balancer/algs"
 	"load-balancer/conf"
-	"log"
+	"load-balancer/log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -14,8 +14,9 @@ type IBalancer interface {
 	ReverseProxy() error
 }
 type Balancer struct {
-	conf *conf.Conf
-	alg  algs.IAlgorithm
+	conf   *conf.Conf
+	logger log.ILogger
+	alg    algs.IAlgorithm
 }
 
 func (b *Balancer) ReverseProxy() error {
@@ -31,19 +32,20 @@ func (b *Balancer) ReverseProxy() error {
 			return
 		}
 		proxy := httputil.NewSingleHostReverseProxy(serverUrl)
-		log.Printf("Incoming request: %s %s", r.Method, r.URL.Path)
+		b.logger.Info(fmt.Sprintf("Incoming request: %s %s", r.Method, r.URL.Path))
 		proxy.ServeHTTP(w, r)
 	})
 
-	log.Printf("Listening on :%d...", b.conf.Port)
+	b.logger.Info(fmt.Sprintf("Listening on :%d...", b.conf.Port))
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", b.conf.Port), nil); err != nil {
 		return fmt.Errorf("server failed: %v", err)
 	}
 	return nil
 }
-func NewBalancer(conf *conf.Conf, alg algs.IAlgorithm) IBalancer {
+func NewBalancer(conf *conf.Conf, alg algs.IAlgorithm, logger log.ILogger) IBalancer {
 	return &Balancer{
-		conf: conf,
-		alg:  alg,
+		conf:   conf,
+		alg:    alg,
+		logger: logger,
 	}
 }

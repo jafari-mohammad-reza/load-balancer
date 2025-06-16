@@ -5,7 +5,9 @@ import (
 	"io"
 	"load-balancer/algs"
 	"load-balancer/conf"
+	"load-balancer/log"
 	"net/http"
+	"path"
 	"testing"
 	"time"
 )
@@ -27,18 +29,26 @@ func TestBalancer_ReverseProxy(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // Give servers time to start
 	defer s1.Close()
 	defer s2.Close()
-
+	tmpLogPath := t.TempDir()
+	tmpPath := path.Join(tmpLogPath, "test-balancer.log")
 	conf := &conf.Conf{
 		Port:           9090,
 		Algorithm:      "RoundRobin",
 		BackendServers: []conf.BackendServer{conf.BackendServer{Host: "localhost", Port: 9001, Weight: 1}, conf.BackendServer{Host: "localhost", Port: 9002, Weight: 1}},
+		Log: conf.LogConf{
+			Logger:  conf.JSON,
+			LogPath: tmpPath,
+		},
 	}
 	alg, err := algs.NewAlgorithm(conf)
 	if err != nil {
 		t.Fatalf("Failed to initialize algorithm: %v", err)
 	}
-
-	b := NewBalancer(conf, alg)
+	logger, err := log.NewLogger(conf)
+	if err != nil {
+		t.Fatalf("Failed to initialize logger: %v", err)
+	}
+	b := NewBalancer(conf, alg, logger)
 
 	go func() {
 		err := b.ReverseProxy()

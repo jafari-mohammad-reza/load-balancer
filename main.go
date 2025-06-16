@@ -25,7 +25,7 @@ func main() {
 		logger.Error(fmt.Errorf("error creating algorithm %v", err))
 		os.Exit(1)
 	}
-	balancer := balancer.NewBalancer(conf, alg)
+	balancer := balancer.NewBalancer(conf, alg, logger)
 	if err := balancer.ReverseProxy(); err != nil {
 		logger.Error(fmt.Errorf("error starting reverse proxy: %v", err))
 		os.Exit(1)
