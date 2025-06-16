@@ -1,6 +1,9 @@
 package balancer
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"load-balancer/algs"
 	"load-balancer/conf"
@@ -9,6 +12,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"path"
 	"strings"
 )
 
@@ -28,24 +33,83 @@ type routeHandler struct {
 func (b *Balancer) Start() error {
 	for _, proxy := range b.conf.Proxies {
 		if err := b.registerProxy(proxy); err != nil {
-			return err
+			return fmt.Errorf("failed to register proxy for host %s: %w", proxy.Host, err)
 		}
 	}
+
 	for port, hostMap := range b.hostRouter {
-		p := port
-		hm := hostMap
-		go func() {
-			b.logger.Info(fmt.Sprintf("Listening on :%d...", p))
-			err := http.ListenAndServe(fmt.Sprintf(":%d", p), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				b.routeRequest(w, r, p, hm)
-			}))
-			if err != nil {
-				b.logger.Error(fmt.Sprintf("Failed to start listener on port %d: %v", p, err))
+		proxyConf, ok := b.getProxyByPort(port)
+		if !ok {
+			b.logger.Error(fmt.Sprintf("No proxy configuration found for port %d", port))
+			continue
+		}
+
+		go func(port int, hostMap map[string][]*routeHandler, proxy conf.ProxyConf) {
+			addr := fmt.Sprintf(":%d", port)
+
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				b.routeRequest(w, r, port, hostMap)
+			})
+
+			server := &http.Server{
+				Addr:    addr,
+				Handler: handler,
 			}
-		}()
+
+			if proxy.TLS {
+				b.logger.Info(fmt.Sprintf("Listening with TLS on %s", addr))
+
+				tlsConfig, err := b.buildTLSConfig(proxy)
+				if err != nil {
+					b.logger.Error(fmt.Sprintf("Failed to build TLS config for port %d: %v", port, err))
+					return
+				}
+				server.TLSConfig = tlsConfig
+
+				if err := server.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					b.logger.Error(fmt.Sprintf("HTTPS server error on port %d: %v", port, err))
+				}
+			} else {
+				b.logger.Info(fmt.Sprintf("Listening on %s", addr))
+
+				if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					b.logger.Error(fmt.Sprintf("HTTP server error on port %d: %v", port, err))
+				}
+			}
+		}(port, hostMap, proxyConf)
 	}
+
 	select {}
 }
+func (b *Balancer) getProxyByPort(port int) (conf.ProxyConf, bool) {
+	for _, proxy := range b.conf.Proxies {
+		if proxy.Port == port {
+			return proxy, true
+		}
+	}
+	return conf.ProxyConf{}, false
+}
+
+func (b *Balancer) buildTLSConfig(proxy conf.ProxyConf) (*tls.Config, error) {
+	cert, err := tls.LoadX509KeyPair(proxy.Certificate, proxy.CertificateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load server cert/key: %w", err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCert, err := os.ReadFile(proxy.ClientCA)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read client CA cert: %w", err)
+	}
+	caCertPool.AppendCertsFromPEM(caCert)
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    caCertPool,
+		MinVersion:   tls.VersionTLS12,
+	}, nil
+}
+
 func (b *Balancer) registerProxy(proxy conf.ProxyConf) error {
 	if _, exists := b.hostRouter[proxy.Port]; !exists {
 		b.hostRouter[proxy.Port] = make(map[string][]*routeHandler)
@@ -71,9 +135,9 @@ func (b *Balancer) routeRequest(w http.ResponseWriter, r *http.Request, port int
 		b.logger.Warn(fmt.Sprintf("No routes registered for host %s on port %d", host, port))
 		return
 	}
-
+	cleanPath := path.Clean(r.URL.Path)
 	for _, handler := range handlers {
-		if strings.HasPrefix(r.URL.Path, handler.Path) {
+		if strings.HasPrefix(cleanPath, handler.Path) {
 			server, err := handler.Alg.NextServer()
 			if err != nil {
 				http.Error(w, "backend unavailable", http.StatusBadGateway)
@@ -86,14 +150,14 @@ func (b *Balancer) routeRequest(w http.ResponseWriter, r *http.Request, port int
 				b.logger.Error(fmt.Sprintf("Invalid backend URL %s: %v", server.GetUrl(), err))
 				return
 			}
-			b.logger.Info(fmt.Sprintf("[%s] %s %s -> %s", host, r.Method, r.URL.Path, server.GetUrl()))
+			b.logger.Info(fmt.Sprintf("[%s] %s %s -> %s", host, r.Method, cleanPath, server.GetUrl()))
 			httputil.NewSingleHostReverseProxy(target).ServeHTTP(w, r)
 			return
 		}
 	}
 
 	http.Error(w, "no matching route", http.StatusNotFound)
-	b.logger.Warn(fmt.Sprintf("No matching path for %s%s", host, r.URL.Path))
+	b.logger.Warn(fmt.Sprintf("No matching path for %s%s", host, cleanPath))
 }
 
 func normalizeHost(raw string) string {

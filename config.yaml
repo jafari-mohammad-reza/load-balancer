@@ -17,7 +17,7 @@ proxies:
     locations:
       - path: "/api"
         algorithm: "RoundRobin"
-        backendServers:
+        backend_servers:
           - host: "localhost"
             port: 8001
           - host: "localhost"
@@ -27,6 +27,18 @@ proxies:
     locations:
       - path: "/"
         algorithm: "Random"
-        backendServers:
+        backend_servers:
+          - host: "localhost"
+            port: 9001
+  - port: 9092
+    host: "safe.com"
+    tls: true
+    certificate: certs/example.crt
+    certificate_key: certs/example.key
+    certificate_ca: certs/example.ca
+    locations:
+      - path: "/"
+        algorithm: "Random"
+        backend_servers:
           - host: "localhost"
             port: 9001

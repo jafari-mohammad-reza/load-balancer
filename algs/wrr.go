@@ -1,6 +1,7 @@
 package algs
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -25,6 +26,9 @@ func (r *WeightedRoundRobinAlgorithm) HealthyServers() ([]IBackendServer, error)
 func (r *WeightedRoundRobinAlgorithm) NextServer() (IBackendServer, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if len(r.orderedHealthy) == 0 {
+		return nil, errors.New("no server available")
+	}
 	r.CurrentIndex = (r.CurrentIndex + 1) % len(r.orderedHealthy)
 	return r.orderedHealthy[r.CurrentIndex], nil
 }

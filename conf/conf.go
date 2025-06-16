@@ -19,18 +19,19 @@ type Conf struct {
 }
 
 type ProxyConf struct {
-	Port           int
-	Host           string
-	Tls            bool
-	Certificate    string
-	CertificateKey string
-	Locations      []LocationConf
+	Port           int            `mapstructure:"port"`
+	Host           string         `mapstructure:"host"`
+	TLS            bool           `mapstructure:"tls"`
+	Certificate    string         `mapstructure:"certificate"`
+	CertificateKey string         `mapstructure:"certificate_key"`
+	ClientCA       string         `mapstructure:"certificate_ca"`
+	Locations      []LocationConf `mapstructure:"locations"`
 }
 
 type LocationConf struct {
-	Path           string
-	Algorithm      string `mapstructure:"algorithm"`
-	BackendServers []BackendServer
+	Path           string          `mapstructure:"path"`
+	Algorithm      string          `mapstructure:"algorithm"`
+	BackendServers []BackendServer `mapstructure:"backend_servers"`
 }
 
 type BackendServer struct {
